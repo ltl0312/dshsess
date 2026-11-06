@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readJSONLines } from 'zstdframes'
-import { listSessions, summarize, turns, sessionsRoot } from './index.js'
+import { listSessions, summarize, turns, sessionsRoot, diagnose } from './index.js'
 
 const USAGE = `dshsess — DSH 会话日志考古
 
@@ -8,6 +8,7 @@ const USAGE = `dshsess — DSH 会话日志考古
   dshsess stats   [--limit 200]
   dshsess show    <session-id-prefix> [--turns] [--types]
   dshsess failures <session-id-prefix>
+  dshsess advice  <session-id-prefix>     归因：这些工具错误说明提示词/工作流哪里漏了
   dshsess grep    <pattern> [--session <prefix>] [--limit 40]
 
 会话目录: ${sessionsRoot()}（可用 DSH_HOME 覆盖）
@@ -135,6 +136,27 @@ if (cmd === 'list') {
   if (shown.length) {
     process.stdout.write('\n最近几次:\n')
     for (const e of shown) process.stdout.write(`  turn ${e.turn} step ${e.step}  ${e.name} ${e.code}\n`)
+  }
+} else if (cmd === 'advice') {
+  const s = pick(arg)
+  const d = await diagnose(s.path)
+  const pct = (x) => (x * 100).toFixed(2) + '%'
+  process.stdout.write(`session ${d.id}\n${d.cwd}\n${d.toolErrors} errors / ${d.toolCalls} calls = ${pct(d.toolErrors / (d.toolCalls || 1))}\n`)
+  process.stdout.write(`turns     ${JSON.stringify(d.turnEnd)}\n`)
+  if (!d.items.length) {
+    process.stdout.write('\n没有工具错误。\n')
+  } else {
+    process.stdout.write('\n#  错误码                       次数   占比    归因 → 动作\n')
+    d.items.forEach((it, i) => {
+      process.stdout.write(`${String(i + 1).padStart(2)} ${it.key.padEnd(28)} ${String(it.count).padStart(4)}  ${pct(it.share).padStart(6)}\n`)
+      process.stdout.write(`     归因  ${it.cause}\n`)
+      process.stdout.write(`     动作  ${it.action}\n`)
+      if (it.turns.length) process.stdout.write(`     轮次  ${it.turns.slice(0, 12).join(', ')}${it.turns.length > 12 ? ` …(+${it.turns.length - 12})` : ''}\n`)
+    })
+  }
+  if (d.loops.length) {
+    process.stdout.write('\n# 原地打转（同一轮同类错误 ≥3 次）\n')
+    for (const l of d.loops.slice(0, 8)) process.stdout.write(`  turn ${String(l.turn).padStart(3)}  ${l.code} ×${l.count}\n`)
   }
 } else if (cmd === 'grep') {
   if (!arg) {

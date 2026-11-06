@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { zstdCompressSync } from 'node:zlib'
-import { listSessions, summarize, turns, readFirstEvent, sessionsRoot } from '../src/index.js'
+import { listSessions, summarize, turns, readFirstEvent, sessionsRoot, diagnose } from '../src/index.js'
 
 function frame(obj) {
   return zstdCompressSync(Buffer.from(JSON.stringify(obj) + '\n', 'utf8'))
@@ -89,4 +89,31 @@ test('turns 产出逐轮时间线', async () => {
   assert.equal(rows[0].toolCalls, 1)
   assert.equal(rows[0].end, 'completed')
   assert.equal(rows[0].endTime - rows[0].time, 2000)
+})
+
+test('diagnose 把错误码归因，并识别原地打转', async () => {
+  const events = [
+    { type: 'session', version: 4, id: 'session-cccc', createdAt: 1792656470000, cwd: 'D:\\Code\\demo' },
+    { type: 'turn/start', seq: 1, time: 1792656471000, data: { turn: 7 } },
+    { type: 'tool/call', seq: 2, time: 1792656471100, data: { turn: 7, step: 1, callId: 'c1', name: 'edit', arguments: '{}' } },
+  ]
+  for (let i = 0; i < 3; i++) {
+    events.push({
+      type: 'tool/result',
+      seq: 10 + i,
+      time: 1792656471200 + i,
+      data: { turn: 7, step: 1, message: { role: 'tool' }, error: { name: 'FsError', code: 'FS_EDIT_NOT_FOUND' } },
+    })
+  }
+  events.push({ type: 'turn/end', seq: 20, time: 1792656473000, data: { turn: 7, reason: { kind: 'error' } } })
+
+  const home = makeHome([{ slug: '--D-Code-demo--', id: 'session-cccc', events }])
+  const p = join(home, 'sessions', '--D-Code-demo--', 'session-cccc', 'session.v4.jsonl.zstd')
+  const d = await diagnose(p)
+
+  assert.equal(d.toolErrors, 3)
+  assert.equal(d.items[0].key, 'FS_EDIT_NOT_FOUND')
+  assert.equal(d.items[0].count, 3)
+  assert.ok(d.items[0].cause.includes('old_string'))
+  assert.deepEqual(d.loops, [{ turn: 7, code: 'FS_EDIT_NOT_FOUND', count: 3 }])
 })

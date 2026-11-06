@@ -34,6 +34,36 @@ turn  steps  tools  errors  end        duration
   12     18     28       0  error      187s
 ```
 
+## 归因：`advice`
+
+`failures` 告诉你错了多少次，`advice` 告诉你错在哪一环。它把每个错误码映射到「提示词/工作流上的具体缺口」，并且单独挑出**同一轮里同类错误 ≥3 次**的原地打转。
+
+```console
+$ dshsess advice 8b1a3304
+60 errors / 6709 calls = 0.89%
+turns     {"completed":145,"error":75,"aborted":15,"max-tokens":3,"interrupted":3}
+
+#  错误码                       次数   占比    归因 → 动作
+ 1 FS_NOT_OBSERVED                22   0.33%
+     归因  编辑前没读文件，宿主用 read-before-edit 策略拒绝
+     动作  在编辑规则里硬性要求「先 read 再 edit」，或让工具返回值里带上文件摘要提示
+     轮次  9, 15, 28, 30, 42, 64, 65, 74, 87, 90, 136, 169 …(+3)
+ 2 FS_EDIT_NOT_FOUND              14   0.21%
+     归因  old_string 与文件现状不一致（文件变了，或凭记忆抄了内容）
+     动作  每次 edit 前重新 read 目标区间；批量改动改用整文件 write
+```
+
+内置归因表覆盖 `FS_NOT_OBSERVED` / `FS_EDIT_NOT_FOUND` / `FS_STALE_VERSION` / `FS_AMBIGUOUS_EDIT` / `FS_NOT_FOUND` / `FS_NOT_TEXT` / `INVALID_ARGS` / `TOOL_TIMEOUT` / `TOOL_OUTCOME_UNKNOWN` / `ABORTED`；表外错误码会带出原始 `tool/result` 让你自己判断，不会瞎猜。
+
+库用法：
+
+```js
+import { diagnose } from 'dshsess'
+const d = await diagnose(sessionPath)
+d.items    // [{ key, count, share, cause, action, turns }]
+d.loops    // [{ turn: 7, code: 'FS_EDIT_NOT_FOUND', count: 3 }]
+```
+
 ## 失败是怎么判定的
 
 不看正文。`tool/result` 上有两个字段是真信号：
