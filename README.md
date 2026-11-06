@@ -1,5 +1,9 @@
 # dshsess
 
+[![CI](https://github.com/ltl0312/dshsess/actions/workflows/ci.yml/badge.svg)](https://github.com/ltl0312/dshsess/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dshsess.svg)](https://www.npmjs.com/package/dshsess)
+[![node](https://img.shields.io/node/v/dshsess.svg)](https://nodejs.org)
+
 DSH 会把自己的会话写成 `~/.dsh/sessions/<cwd-slug>/<session-id>/session.v4.jsonl.zstd`。
 那不是一个普通 gzip 文件：它是**多帧 zstd**，Node 自带的 `zstdDecompressSync` 只会解出第一帧（约 226 字节）就停下，还不报错。所以拿现成工具去读，看到的是「4 行、0.3 KB」——真实会话可能是 40 万行、587 MB。
 
