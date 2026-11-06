@@ -151,7 +151,7 @@ if (cmd === 'list') {
       if (!re.test(text)) continue
       hits++
       const snippet = text.length > 160 ? text.slice(0, 160) + '…' : text
-      process.stdout.write(`${s.id.slice(0, 8)}  ${ev.type.padEnd(18)} ${snippet}\n`)
+      process.stdout.write(`${bare(s.id).slice(0, 8)}  ${ev.type.padEnd(18)} ${snippet}\n`)
       if (hits >= (args.limit ?? 40)) process.exit(0)
     }
   }
